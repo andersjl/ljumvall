@@ -1,0 +1,18 @@
+[package]
+name = "ljumvall_cli_status"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Encapsulates Clap::Command and more CLI status"
+version = "0.1.0"
+
+[dependencies]
+clap.workspace = true
+ljumvall_error.workspace = true
+termsize.workspace = true
+unicode-segmentation.workspace = true
+
+[dev-dependencies]
+regex = "*"
+speculate2 = "*"
+ljumvall_test_utils = { path = "../test_utils" }

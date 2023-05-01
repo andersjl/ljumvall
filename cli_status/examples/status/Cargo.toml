@@ -1,0 +1,14 @@
+[workspace]
+
+[package]
+name = "ljumvall_cli_status_example_status"
+version = "0.1.0"
+authors = ["Anders Lindeberg <ajl@andersjlindeberg.se>"]
+edition = "2021"
+license = "MIT-0"
+
+[dependencies]
+clap = "4.2.5"
+ljumvall_cli_status = { path = "../..", version = "0.1.0" }
+ljumvall_error = { path = "../../../error", version = "0.1.0" }
+thiserror = "1.0.40"

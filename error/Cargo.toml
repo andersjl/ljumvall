@@ -1,0 +1,13 @@
+[package]
+name = "ljumvall_error"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A macro using thiserror to turn Display into an Error"
+version = "0.1.0"
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+anyhow = "*"
