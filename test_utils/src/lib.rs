@@ -246,14 +246,17 @@ impl TestRequest {
         }
         if self.get {
             curl.arg("--get");
+        } else if self.data.is_empty() {
+            curl.arg("--request").arg("POST");
         }
         if self.redir {
             curl.arg("--location");
         }
         for item in self.data {
-            curl.arg("--data-urlencode").arg(&format!("\"{}\"", item));
+            curl.arg("--data-urlencode").arg(&format!("{}", item));
         }
         curl.arg(&self.url);
+        //eprintln!("curl {}", curl.get_args().map(|a| a.to_string_lossy()).collect::<Vec<_>>().join(" "));
         let output = curl.output().unwrap().stdout;
         let output = String::from_utf8_lossy(&output);
         let parts = OUTPUT.captures(&output).unwrap();
@@ -264,9 +267,9 @@ impl TestRequest {
         }
     }
 
-    pub fn post(mut self, name: &str, value: &str) -> Self {
+    pub fn post(mut self) -> Self {
         self.get = false;
-        self.data(name, value)
+        self
     }
 }
 
