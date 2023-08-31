@@ -4,7 +4,7 @@ authors.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Encapsulates Clap::Command and more CLI status"
-version = "0.1.0"
+version = "0.1.1"
 
 [dependencies]
 clap.workspace = true

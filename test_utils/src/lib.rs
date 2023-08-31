@@ -1,33 +1,52 @@
 use regex::Regex;
 use std::fmt::Display;
 
-/// What output to expect from the tested binary's `stdout`
-pub enum TestCrateOutput {
-    /// The ouput is expected to equal the `String`.
-    Equals(String),
-    /// The ouput is expected to match a `Regex` compiled from the `String`.
+/// What output to expect from the command's `stdout`
+pub enum TestCommandOutput {
+    /// Output is expected to equal the `String`.
+    EqualTo(String),
+    /// Output is expected not to equal the `String`.
+    NotEqualTo(String),
+    /// Output is expected to match a `Regex` compiled from the `String`.
     Matches(String),
-    /// The ouput is expected to start with the `String`.
+    /// Output is expected not to match a `Regex` compiled from the `String`.
+    NotMatches(String),
+    /// Output is expected to start with the `String`.
     StartsWith(String),
-    /// The ouput is ignored.
+    /// Output is expected not to start with the `String`.
+    NotStartsWith(String),
+    /// Output is ignored.
     Whatever,
 }
 
-impl TestCrateOutput {
-    /// `Equals(s.to_string())`
-    pub fn equals<T: AsRef<str> + Display>(s: T) -> Self {
-        Self::Equals(s.to_string())
+impl TestCommandOutput {
+    /// `EqualTo(s.to_string())`
+    pub fn equal_to<T: AsRef<str> + Display>(s: T) -> Self {
+        Self::EqualTo(s.to_string())
+    }
+    /// `NotEqualTo(s.to_string())`
+    pub fn not_equal_to<T: AsRef<str> + Display>(s: T) -> Self {
+        Self::NotEqualTo(s.to_string())
     }
     /// `Matches(s.to_string())`
     pub fn matches<T: AsRef<str> + Display>(s: T) -> Self {
         Self::Matches(s.to_string())
     }
+    /// `NotMatches(s.to_string())`
+    pub fn not_matches<T: AsRef<str> + Display>(s: T) -> Self {
+        Self::NotMatches(s.to_string())
+    }
     /// `StartsWith(s.to_string())`
     pub fn starts_with<T: AsRef<str> + Display>(s: T) -> Self {
         Self::StartsWith(s.to_string())
     }
+    /// `NotStartsWith(s.to_string())`
+    pub fn not_starts_with<T: AsRef<str> + Display>(s: T) -> Self {
+        Self::NotStartsWith(s.to_string())
+    }
 }
 
+/// `std::fs::crate_dir_all()` unwrapped or panicking with failing path.
 pub fn create_dir_all(dir: &str) {
     std::fs::create_dir_all(dir).expect(&format!(
         "'create_dir_all(\"{}\")' failed",
@@ -37,12 +56,84 @@ pub fn create_dir_all(dir: &str) {
     ));
 }
 
+/// Execute the command, expecting
+pub fn test_command(
+    directory: &str,
+    name: &str,
+    args: &[&str],
+    expect_error: bool,
+    show_stdout: bool,
+    expect_output: TestCommandOutput,
+    fail_msg: Option<&str>,
+) {
+    let mut default_msg = String::new();
+    let fail_msg = fail_msg.unwrap_or_else(|| {
+        let mut argstr = String::new();
+        if !args.is_empty() {
+            argstr = argstr + " "
+                + &args.iter().map(|s| *s).collect::<Vec<_>>().join(" ");
+        }
+        default_msg = format!("cd {}; {} {} failed", directory, name, argstr);
+        &default_msg
+    });
+    let mut command = std::process::Command::new(name);
+    command.current_dir(directory);
+    for arg in args {
+        command.arg(arg);
+    }
+    let output = command.output().expect(fail_msg);
+    let exit_code = output.status.code();
+    if exit_code.is_none() || (expect_error ^ (exit_code.unwrap() != 0)) {
+        if show_stdout {
+            eprintln!(
+                "stdout: {}",
+                String::from_utf8_lossy(&output.stdout),
+            );
+        }
+        eprintln!(
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+        panic!("exit code: {}", exit_code.unwrap_or(-11111));
+    }
+    let output = String::from_utf8_lossy(&if expect_error {
+        &output.stderr
+    } else {
+        &output.stdout
+    });
+    match expect_output {
+        TestCommandOutput::EqualTo(expected) => {
+            assert_eq!(output, expected);
+        }
+        TestCommandOutput::NotEqualTo(expected) => {
+            assert_ne!(output, expected);
+        }
+        TestCommandOutput::Matches(expected) => {
+            let regex = Regex::new(&expected);
+            assert!(regex.is_ok());
+            assert!(regex.unwrap().is_match(&output));
+        }
+        TestCommandOutput::NotMatches(expected) => {
+            let regex = Regex::new(&expected);
+            assert!(regex.is_ok());
+            assert!(!regex.unwrap().is_match(&output));
+        }
+        TestCommandOutput::StartsWith(expected) => {
+            assert!(output.starts_with(&expected));
+        }
+        TestCommandOutput::NotStartsWith(expected) => {
+            assert!(!output.starts_with(&expected));
+        }
+        _ => (),
+    }
+}
+
 pub fn test_crate(
     crate_dir: &str,
     cargo_args: &[&str],
     expect_error: bool,
     show_stdout: bool,
-    expect_output: TestCrateOutput,
+    expect_output: TestCommandOutput,
 ) {
     use std::process::Command;
 
@@ -51,52 +142,17 @@ pub fn test_crate(
         .arg("update")
         .output()
         .ok();
-    let output = Command::new("cargo")
-        .current_dir(crate_dir)
-        .arg("--quiet")
-        .args(cargo_args)
-        .output()
-        .expect(&format!(
-            "*** 'cd {}; cargo {}' failed",
-            crate_dir,
-            cargo_args.join(" "),
-        ));
-    let exit_code = output.status.code();
-    if exit_code.is_none() || (expect_error ^ (exit_code.unwrap() != 0)) {
-        if show_stdout {
-            eprintln!(
-                "tested program stdout: {}",
-                String::from_utf8_lossy(&output.stdout),
-            );
-        }
-        eprintln!(
-            "tested program stderr: {}",
-            String::from_utf8_lossy(&output.stderr),
-        );
-        panic!(
-            "tested program exit code: {}",
-            exit_code.unwrap_or(-1111111111)
-        );
-    }
-    let output = String::from_utf8_lossy(&if expect_error {
-        &output.stderr
-    } else {
-        &output.stdout
-    });
-    match expect_output {
-        TestCrateOutput::Equals(expected) => {
-            assert_eq!(output, expected);
-        }
-        TestCrateOutput::Matches(expected) => {
-            let regex = Regex::new(&expected);
-            assert!(regex.is_ok());
-            assert!(regex.unwrap().is_match(&output));
-        }
-        TestCrateOutput::StartsWith(expected) => {
-            assert!(output.starts_with(&expected));
-        }
-        _ => (),
-    }
+    let mut args = vec!["--quiet"];
+    args.extend(cargo_args);
+    test_command(
+        crate_dir,
+        "cargo",
+        args.as_slice(),
+        expect_error,
+        show_stdout,
+        expect_output,
+        None,
+    );
 }
 
 #[macro_export]

@@ -243,7 +243,7 @@ struct Task<'a> {
 mod tests {
     use super::*;
     use clap::Arg;
-    use ljumvall_test_utils::{test_crate, TestCrateOutput};
+    use ljumvall_test_utils::{test_crate, TestCommandOutput};
     use regex::Regex;
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -306,7 +306,7 @@ mod tests {
             before {
                 let mut arg: Option<&str> = None;
                 let mut error: Option<&str> = None;
-                let mut output = TestCrateOutput::Whatever;
+                let mut output = TestCommandOutput::Whatever;
                 let mut now: i64 = 0;
                 // 17 ms period start now
                 let log1 = Rc::new(RefCell::new(String::new()));
@@ -404,12 +404,15 @@ mod tests {
 
                 it "outputs a new line" {
                     arg = Some("a new line");
-                    output = TestCrateOutput::equals("\nfirst line\na new line");
+                    output = TestCommandOutput::equal_to(
+                        "\nfirst line\na new line"
+                    );
                 }
 
                 it "quiet iff arg verbosity higher than set" {
                     arg = Some("quiet");
-                    output = TestCrateOutput::equals("\nfirst line\nquiet");
+                    output =
+                        TestCommandOutput::equal_to("\nfirst line\nquiet");
                 }
             }
 
@@ -421,7 +424,9 @@ mod tests {
 
                 it "makes a new line iff dirty" {
                     arg = Some("iff dirty");
-                    output = TestCrateOutput::equals("\nfirst line\niff dirty");
+                    output = TestCommandOutput::equal_to(
+                        "\nfirst line\niff dirty"
+                    );
                 }
             }
 
@@ -431,7 +436,7 @@ mod tests {
                 it "output, see examples/status" {
                     tested = "tell";
                     use_test_crate = true;
-                    output = TestCrateOutput::matches(
+                    output = TestCommandOutput::matches(
                         r#"\rfirst line\s*\rtale      "#
                     );
                 }
@@ -459,7 +464,7 @@ mod tests {
 
                     it "prints error before usage and error exit" {
                         error = Some("test-error");
-                        output = TestCrateOutput::equals(
+                        output = TestCommandOutput::equal_to(
                             "test-error\nUsage: test [OPTIONS] [tested]\n"
                         );
                     }
@@ -474,7 +479,7 @@ mod tests {
 
                 context "with no error" {
                     it "just prints usage and exit 0" {
-                        output = TestCrateOutput::equals(
+                        output = TestCommandOutput::equal_to(
                             "Usage: test [OPTIONS] [tested]\n"
                         );
                     }
@@ -483,7 +488,7 @@ mod tests {
                 context "with error" {
                     it "prints error before usage and error exit" {
                         error = Some("test-error");
-                        output = TestCrateOutput::equals(
+                        output = TestCommandOutput::equal_to(
                             "test-error\nUsage: test [OPTIONS] [tested]\n"
                         );
                     }
