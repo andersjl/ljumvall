@@ -1,5 +1,6 @@
 use regex::Regex;
 use std::fmt::Display;
+use std::path::Path;
 
 /// What output to expect from the command's `stdout`
 pub enum TestCommandOutput {
@@ -46,12 +47,12 @@ impl TestCommandOutput {
     }
 }
 
-/// `std::fs::crate_dir_all()` unwrapped or panicking with failing path.
-pub fn create_dir_all(dir: &str) {
+/// `std::fs::create_dir_all()` unwrapped or panicking with failing path.
+pub fn create_dir_all(dir: &Path) {
     std::fs::create_dir_all(dir).expect(&format!(
         "'create_dir_all(\"{}\")' failed",
         std::fs::canonicalize(dir)
-            .unwrap_or_else(|_| std::path::Path::new(dir).to_path_buf())
+            .unwrap_or_else(|_| dir.to_path_buf())
             .display(),
     ));
 }
@@ -70,7 +71,8 @@ pub fn test_command(
     let fail_msg = fail_msg.unwrap_or_else(|| {
         let mut argstr = String::new();
         if !args.is_empty() {
-            argstr = argstr + " "
+            argstr = argstr
+                + " "
                 + &args.iter().map(|s| *s).collect::<Vec<_>>().join(" ");
         }
         default_msg = format!("cd {}; {} {} failed", directory, name, argstr);
@@ -85,15 +87,9 @@ pub fn test_command(
     let exit_code = output.status.code();
     if exit_code.is_none() || (expect_error ^ (exit_code.unwrap() != 0)) {
         if show_stdout {
-            eprintln!(
-                "stdout: {}",
-                String::from_utf8_lossy(&output.stdout),
-            );
+            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
         }
-        eprintln!(
-            "stderr: {}",
-            String::from_utf8_lossy(&output.stderr),
-        );
+        eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         panic!("exit code: {}", exit_code.unwrap_or(-11111));
     }
     let output = String::from_utf8_lossy(&if expect_error {
@@ -237,17 +233,19 @@ pub struct TestRequest {
     get: bool,
     redir: bool,
     headers: Vec<String>,
+    form: Vec<FormPart>,
 }
 
 impl TestRequest {
     pub fn new(url: &str) -> Self {
         Self {
-            url: url.to_string(),
-            data: Vec::new(),
             cookies: false,
+            data: Vec::new(),
+            form: Vec::new(),
             get: true,
-            redir: true,
             headers: Vec::new(),
+            redir: true,
+            url: url.to_string(),
         }
     }
 
@@ -258,16 +256,6 @@ impl TestRequest {
 
     pub fn data(mut self, name: &str, value: &str) -> Self {
         self.data.push(format!("{}={}", name, value));
-        self
-    }
-
-    pub fn header(mut self, name: &str, value: &str) -> Self {
-        self.headers.push(format!("{}: {}", name, value));
-        self
-    }
-
-    pub fn no_redirect(mut self) -> Self {
-        self.redir = false;
         self
     }
 
@@ -294,7 +282,7 @@ impl TestRequest {
             \"",
         );
         if self.cookies {
-            create_dir_all("tmp");
+            create_dir_all(Path::new("tmp"));
             curl.arg("--cookie-jar")
                 .arg("tmp/__test-cookies.txt")
                 .arg("--cookie")
@@ -302,7 +290,7 @@ impl TestRequest {
         }
         if self.get {
             curl.arg("--get");
-        } else if self.data.is_empty() {
+        } else if self.data.is_empty() && self.form.is_empty() {
             curl.arg("--request").arg("POST");
         }
         if self.redir {
@@ -311,8 +299,16 @@ impl TestRequest {
         for item in self.data {
             curl.arg("--data-urlencode").arg(&format!("{}", item));
         }
+        for part in self.form {
+            curl.arg("--form").arg(&format!(
+                "{}={}{}",
+                &part.name,
+                if part.file { "@" } else { "" },
+                &part.value,
+            ));
+        }
         curl.arg(&self.url);
-        //eprintln!("curl {}", curl.get_args().map(|a| a.to_string_lossy()).collect::<Vec<_>>().join(" "));
+//eprintln!("curl {}", curl.get_args().map(|a| a.to_string_lossy()).collect::<Vec<_>>().join(" "));
         let output = curl.output().unwrap().stdout;
         let output = String::from_utf8_lossy(&output);
         let parts = OUTPUT.captures(&output).unwrap();
@@ -321,6 +317,26 @@ impl TestRequest {
             status: parts.get(2).unwrap().as_str().to_string(),
             redirect: parts.get(3).unwrap().as_str().to_string(),
         }
+    }
+
+    pub fn form_part(mut self, name: &str, value: &str, file: bool) -> Self {
+        self.get = false;
+        self.form.push(FormPart {
+            name: name.to_string(),
+            value: value.to_string(),
+            file,
+        });
+        self
+    }
+
+    pub fn header(mut self, name: &str, value: &str) -> Self {
+        self.headers.push(format!("{}: {}", name, value));
+        self
+    }
+
+    pub fn no_redirect(mut self) -> Self {
+        self.redir = false;
+        self
     }
 
     pub fn post(mut self) -> Self {
@@ -348,4 +364,11 @@ impl TestResponse {
     pub fn status(&self) -> &str {
         self.status.as_str()
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct FormPart {
+    name: String,
+    value: String,
+    file: bool,
 }
