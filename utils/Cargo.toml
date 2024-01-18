@@ -1,0 +1,9 @@
+[package]
+name = "ljumvall_utils"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Miscellaneous"
+version = "0.1.0"
+
+[dependencies]

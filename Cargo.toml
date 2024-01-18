@@ -1,5 +1,5 @@
 [workspace]
-members = ["cli_status", "error", "path_ext", "progrep", "test_utils"]
+members = ["cli_status", "error", "path_ext", "progrep", "test_utils", "utils"]
 
 [workspace.package]
 authors = ["Anders Lindeberg <ajl@andersjlindeberg.se>"]
