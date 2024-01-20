@@ -263,7 +263,7 @@ impl TestRequest {
         use lazy_static::lazy_static;
         lazy_static! {
             static ref OUTPUT: Regex = Regex::new(
-                r#"((?s).*)"\n__variables__\nstatus: (.*)\nredirect: (.*)""#,
+r#"((?s).*)"\n__variables__\nstatus: (.*)\ncontent-type: (.*)\nredirect: (.*)""#,
             )
             .unwrap();
         }
@@ -278,6 +278,7 @@ impl TestRequest {
             "\"\
                 \n__variables__\
                 \nstatus: %{response_code}\
+                \ncontent-type: %{content_type}\
                 \nredirect: %{redirect_url}\
             \"",
         );
@@ -315,7 +316,8 @@ impl TestRequest {
         TestResponse {
             body: parts.get(1).unwrap().as_str().to_string(),
             status: parts.get(2).unwrap().as_str().to_string(),
-            redirect: parts.get(3).unwrap().as_str().to_string(),
+            content_type: parts.get(3).unwrap().as_str().to_string(),
+            redirect: parts.get(4).unwrap().as_str().to_string(),
         }
     }
 
@@ -348,6 +350,7 @@ impl TestRequest {
 #[derive(Clone, Debug)]
 pub struct TestResponse {
     body: String,
+    content_type: String,
     redirect: String,
     status: String,
 }
@@ -355,6 +358,10 @@ pub struct TestResponse {
 impl TestResponse {
     pub fn body(&self) -> &str {
         self.body.as_str()
+    }
+
+    pub fn content_type(&self) -> &str {
+        self.content_type.as_str()
     }
 
     pub fn redirect(&self) -> &str {
