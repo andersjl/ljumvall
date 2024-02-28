@@ -1,4 +1,4 @@
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 use std::fmt::Display;
 use std::path::Path;
 
@@ -176,8 +176,6 @@ pub fn run_http_server(
     requests: Vec<TestRequest>,
 ) -> Vec<TestResponse> {
     use std::process::Command;
-    use std::thread::sleep;
-    use std::time::Duration;
 
     let mut result: Vec<TestResponse> = Vec::new();
     println!("building {} ... ", server_dir);
@@ -214,7 +212,6 @@ pub fn run_http_server(
         .arg("--quiet")
         .spawn()
     {
-        sleep(Duration::from_secs(2));
         for req in requests {
             result.push(req.fetch_response());
         }
@@ -261,11 +258,16 @@ impl TestRequest {
 
     pub fn fetch_response(self) -> TestResponse {
         use lazy_static::lazy_static;
+        use std::thread::sleep;
+        use std::time::Duration;
+
         lazy_static! {
-            static ref OUTPUT: Regex = Regex::new(
-r#"((?s).*)"\n__variables__\nstatus: (.*)\ncontent-type: (.*)\nredirect: (.*)""#,
+            static ref OUTPUT: Regex = RegexBuilder::new(
+r#"(.*)"\n__variables__\nstatus: (.*)\ncontent-type: (.*)\nredirect: (.*)""#,
             )
-            .unwrap();
+                .dot_matches_new_line(true)
+                .build()
+                .unwrap();
         }
 
         use std::process::Command;
@@ -274,6 +276,7 @@ r#"((?s).*)"\n__variables__\nstatus: (.*)\ncontent-type: (.*)\nredirect: (.*)""#
         for header in self.headers {
             curl.arg("--header").arg(&format!("\"{}\"", header));
         }
+        curl.arg("--include");
         curl.arg("--write-out").arg(
             "\"\
                 \n__variables__\
@@ -309,15 +312,33 @@ r#"((?s).*)"\n__variables__\nstatus: (.*)\ncontent-type: (.*)\nredirect: (.*)""#
             ));
         }
         curl.arg(&self.url);
-//eprintln!("curl {}", curl.get_args().map(|a| a.to_string_lossy()).collect::<Vec<_>>().join(" "));
-        let output = curl.output().unwrap().stdout;
-        let output = String::from_utf8_lossy(&output);
-        let parts = OUTPUT.captures(&output).unwrap();
-        TestResponse {
-            body: parts.get(1).unwrap().as_str().to_string(),
-            status: parts.get(2).unwrap().as_str().to_string(),
-            content_type: parts.get(3).unwrap().as_str().to_string(),
-            redirect: parts.get(4).unwrap().as_str().to_string(),
+        loop {
+            let raw = curl.output().unwrap().stdout;
+            let all = String::from_utf8_lossy(&raw);
+            let (headers, output) =
+                all.rsplit_once("\r\n\r\n").unwrap_or_else(|| ("", &all));
+            let parts = OUTPUT.captures(output).unwrap();
+            let status = parts.get(2).unwrap().as_str().to_string();
+            if status.parse::<i64>().unwrap() == 0 {
+                sleep(Duration::from_secs(1));
+            } else {
+                /*
+                eprintln!(
+                    "all: {:?}\nheaders: {:?}\noutput: {:?}",
+                    all,
+                    headers,
+                    output,
+                );
+                */
+                break TestResponse {
+                    all: all.to_string(),
+                    headers: headers.to_string(),
+                    body: parts.get(1).unwrap().as_str().to_string(),
+                    status,
+                    content_type: parts.get(3).unwrap().as_str().to_string(),
+                    redirect: parts.get(4).unwrap().as_str().to_string(),
+                }
+            }
         }
     }
 
@@ -349,6 +370,8 @@ r#"((?s).*)"\n__variables__\nstatus: (.*)\ncontent-type: (.*)\nredirect: (.*)""#
 
 #[derive(Clone, Debug)]
 pub struct TestResponse {
+    all: String,
+    headers: String,
     body: String,
     content_type: String,
     redirect: String,
@@ -362,6 +385,20 @@ impl TestResponse {
 
     pub fn content_type(&self) -> &str {
         self.content_type.as_str()
+    }
+
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .rsplit("\r\n")
+            .find_map(|h| h.starts_with(name).then(|| &h[(name.len() + 2)..]))
+    }
+
+    pub fn headers(&self) -> &str {
+        self.headers.as_str()
+    }
+
+    pub fn all(&self) -> &str {
+        self.all.as_str()
     }
 
     pub fn redirect(&self) -> &str {
