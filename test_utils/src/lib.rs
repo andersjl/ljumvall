@@ -337,7 +337,7 @@ r#"(.*)"\n__variables__\nstatus: (.*)\ncontent-type: (.*)\nredirect: (.*)""#,
                     status,
                     content_type: parts.get(3).unwrap().as_str().to_string(),
                     redirect: parts.get(4).unwrap().as_str().to_string(),
-                }
+                };
             }
         }
     }
