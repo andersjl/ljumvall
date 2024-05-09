@@ -259,7 +259,7 @@ impl TestRequest {
     pub fn fetch_response(self) -> TestResponse {
         use lazy_static::lazy_static;
         use std::thread::sleep;
-        use std::time::Duration;
+        use std::time::{Duration, Instant};
 
         lazy_static! {
             static ref OUTPUT: Regex = RegexBuilder::new(
@@ -312,13 +312,19 @@ r#"(.*)"\n__variables__\nstatus: (.*)\ncontent-type: (.*)\nredirect: (.*)""#,
             ));
         }
         curl.arg(&self.url);
+        let start = Instant::now();
+        let max_wait = Duration::from_secs(10);
         loop {
             let raw = curl.output().unwrap().stdout;
             let all = String::from_utf8_lossy(&raw);
             let (headers, output) =
                 all.rsplit_once("\r\n\r\n").unwrap_or_else(|| ("", &all));
             let parts = OUTPUT.captures(output).unwrap();
-            let status = parts.get(2).unwrap().as_str().to_string();
+            let status = if start.elapsed() > max_wait {
+                "999"
+            } else {
+                parts.get(2).unwrap().as_str()
+            }.to_string();
             if status.parse::<i64>().unwrap() == 0 {
                 sleep(Duration::from_secs(1));
             } else {
